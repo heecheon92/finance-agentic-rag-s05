@@ -5,6 +5,7 @@ LLM 이 하는 일은 Pydantic 스키마를 채우는 것뿐이다. Qdrant Filte
 0건일 때 완화하는 일은 코드가 한다. 모델에게 필터 문법을 시키면 틀린 필드명을
 지어내고, 그 순간 검색이 조용히 0건이 된다.
 """
+
 from __future__ import annotations
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -33,10 +34,23 @@ def extract_filters(question: str) -> QueryFilters:
 
     LLM 에게 QueryFilters 스키마를 채우게 한다. 모르는 칸은 비워 둔다(추측 금지).
     Qdrant Filter 로 바꾸는 일(to_qdrant)과 0건일 때 푸는 일(relax)은 filters.py 가 한다.
+    모델 객체와 dict 응답을 모두 QueryFilters로 검증한다.
+    키가 없거나 호출·검증이 실패하면 기본 필터를 반환한다.
+    이때 질문별 조건은 비지만 exclude_synthetic=True는 유지된다.
     """
     # ── TODO: 여기를 채우세요 ──────────────────────────────
     # 요구사항은 tests/test_agent.py 의 selfquery 테스트 4개가 정한다. 재료는 이 파일 위에 있다.
     #   PROMPT · QueryFilters(retrieval/filters.py) · get_llm("selfquery", size="small") · is_fake · llm.with_structured_output(QueryFilters, method="json_schema")
     # 돌려줄 것: QueryFilters. 모델이 dict 를 돌려줄 수도 있다.
     # 생각할 것: 키가 없거나 호출이 실패했을 때 무엇을 돌려주는 것이 덜 나쁜가. 빈 필터는 "필터 없이 검색"이고, 잘못 만든 필터는 "조용히 0건"이다.
-    raise NotImplementedError("TODO: extract_filters 를 구현하세요")
+    # raise NotImplementedError("TODO: extract_filters 를 구현하세요")
+    try:
+        llm = get_llm("selfquery", size="small")
+        if is_fake(llm):
+            return QueryFilters()
+        result = (
+            PROMPT | llm.with_structured_output(QueryFilters, method="json_schema")
+        ).invoke({"question": question})
+        return QueryFilters.model_validate(result)
+    except Exception:  # noqa: BLE001 — 추출 실패 시 기본 필터로 검색을 계속한다.
+        return QueryFilters()

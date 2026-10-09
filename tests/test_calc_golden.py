@@ -55,6 +55,42 @@ def test_c03_min_guarantee_wins():
     assert r.warnings, "최저보장이 적용된 사실을 답변에 남겨야 한다"
 
 
+@pytest.mark.parametrize("month_rule, expected_rate", [("floor", 0.291), ("ceil", 0.333)])
+def test_early_termination_deduction_and_partial_month(month_rule, expected_rate):
+    r = calc.savings_early_termination_rate(
+        base_rate_pct=5.0, deduction_pct=80, months_elapsed=7.5,
+        months_contract=24, month_rule=month_rule,
+    )
+    assert r.value == expected_rate
+
+
+def test_early_termination_fixed_zero_does_not_require_formula_inputs():
+    r = calc.savings_early_termination_rate(base_rate_pct=None, fixed_rate_pct=0.0)
+    assert r.value == 0.0
+    assert r.abstain_reason is None
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"base_rate_pct": None, "ratio": 0.6, "months_elapsed": 7, "months_contract": 24},
+    {"base_rate_pct": 5, "months_elapsed": 7, "months_contract": 24},
+    {"base_rate_pct": 5, "ratio": 0.6, "days_elapsed": 120},
+    {"base_rate_pct": 5, "ratio": 0.6, "days_elapsed": 120, "days_contract": 0},
+])
+def test_early_termination_missing_inputs_do_not_invent_a_rate(kwargs):
+    r = calc.savings_early_termination_rate(**kwargs)
+    assert r.value is None
+    assert r.abstain_reason
+
+
+def test_early_termination_truncation_does_not_undercut_minimum():
+    r = calc.savings_early_termination_rate(
+        base_rate_pct=1.0, ratio=0.1, days_elapsed=1, days_contract=365,
+        min_rate_pct=0.1234, rate_precision=3,
+    )
+    assert r.value == 0.1234
+    assert r.warnings
+
+
 def test_c04_rounding_rule_changes_the_answer():
     """총액 절사와 건별 절사가 다르다. 하나로 강요하지 않는다."""
     kw = dict(amount=300000, rate_pct=5.0, maturity="2027-01-15",
